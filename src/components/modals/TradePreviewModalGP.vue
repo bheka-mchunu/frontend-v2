@@ -1,24 +1,53 @@
 <template>
-  <BalModal
-    :show="open"
-    @close="onClose"
-    :title="$t('previewTradeTransactions')"
-  >
+  <BalModal :show="open" @close="onClose" :title="$t('previewTrade')">
     <div>
-      <div
-        class="-mx-4 p-4 flex items-center border-b border-t dark:border-gray-700"
-      >
-        <BalAssetSet
-          :addresses="[addressIn, addressOut]"
-          :size="30"
-          :width="55"
-        />
-        <div class="flex flex-col">
-          <div class="font-bold">
-            {{ fNum(amountIn, 'token') }} {{ symbolIn }} ->
-            {{ fNum(amountOut, 'token') }} {{ symbolOut }}
+      <div class="relative">
+        <div
+          class="p-3 bg-gray-50 border border-gray-100 rounded-tr-lg rounded-tl-lg"
+        >
+          {{ $t('effectivePrice') }}
+          {{
+            exactIn
+              ? effectivePriceExactInMessage
+              : effectivePriceExactOutMessage
+          }}
+        </div>
+        <div
+          class="rounded-bl-lg rounded-br-lg border-gray-100 border-b border-l border-r shadow-lg"
+        >
+          <div class="p-3 border-gray-100 border-b relative">
+            <div class="flex items-center">
+              <div class="mr-3">
+                <BalAsset :address="addressIn" :size="36" />
+              </div>
+              <div>
+                <div class="font-medium">
+                  {{ fNum(amountIn, 'token') }} {{ symbolIn }}
+                </div>
+                <div class="text-gray-500 text-sm">
+                  {{ fNum(valueIn, 'usd') }}
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="text-gray-500 text-sm">{{ fNum(valueIn, 'usd') }}</div>
+          <div class="arrow-down">
+            <ArrowDownIcon />
+          </div>
+          <div class="p-3">
+            <div class="flex items-center">
+              <div class="mr-3">
+                <BalAsset :address="addressOut" :size="36" />
+              </div>
+              <div>
+                <div class="font-medium">
+                  {{ fNum(amountOut, 'token') }} {{ symbolOut }}
+                </div>
+                <div class="text-gray-500 text-sm">
+                  {{ fNum(valueOut, 'usd') }}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div>
@@ -90,13 +119,11 @@
 
 <script lang="ts">
 import { defineComponent, toRefs, computed } from 'vue';
-import { useStore } from 'vuex';
-
-import { ETHER } from '@/constants/tokenlists';
 
 import useNumbers from '@/composables/useNumbers';
 import useTokenApprovalGP from '@/composables/trade/useTokenApprovalGP';
 import useGnosisProtocol from '@/composables/useGnosisProtocol';
+import useTokens from '@/composables/useTokens';
 
 export default defineComponent({
   emits: ['trade', 'close'],
@@ -131,58 +158,56 @@ export default defineComponent({
     formattedFeeAmount: {
       type: String,
       required: true
+    },
+    isWrap: {
+      type: Boolean,
+      required: true
+    },
+    isUnwrap: {
+      type: Boolean,
+      required: true
+    },
+    exactIn: {
+      type: Boolean,
+      required: true
+    },
+    isEthTrade: {
+      type: Boolean,
+      required: true
+    },
+    effectivePriceExactInMessage: {
+      type: String,
+      required: true
+    },
+    effectivePriceExactOutMessage: {
+      type: String,
+      required: true
     }
   },
   setup(props, { emit }) {
-    const store = useStore();
+    // COMPOSABLES
     const { fNum, toFiat } = useNumbers();
     const { gnosisExplorer } = useGnosisProtocol();
+    const { allTokensIncludeEth: tokens } = useTokens();
 
-    const { addressIn, amountIn, addressOut } = toRefs(props);
+    // DATA
+    const { addressIn, amountIn, amountOut, addressOut } = toRefs(props);
 
-    const getTokens = (params = {}) =>
-      store.getters['registry/getTokens'](params);
-    const getConfig = () => store.getters['web3/getConfig']();
-    const tokens = computed(() => getTokens({ includeEther: true }));
-
-    const isWrap = computed(() => {
-      const config = getConfig();
-      return (
-        addressIn.value === ETHER.address &&
-        addressOut.value === config.addresses.weth
-      );
-    });
-
-    const isUnwrap = computed(() => {
-      const config = getConfig();
-      return (
-        addressOut.value === ETHER.address &&
-        addressIn.value === config.addresses.weth
-      );
-    });
-
+    // COMPUTED
     const valueIn = computed(() => toFiat(amountIn.value, addressIn.value));
 
-    const symbolIn = computed(() => {
-      const token = tokens.value[addressIn.value];
-      if (!token) {
-        return '';
-      }
-      return token.symbol;
-    });
+    const valueOut = computed(() => toFiat(amountOut.value, addressOut.value));
 
-    const symbolOut = computed(() => {
-      const token = tokens.value[addressOut.value];
-      if (!token) {
-        return '';
-      }
-      return token.symbol;
-    });
+    const symbolIn = computed(
+      () => tokens.value[addressIn.value]?.symbol ?? ''
+    );
 
-    const isEthTrade = computed(() => addressIn.value === ETHER.address);
+    const symbolOut = computed(
+      () => tokens.value[addressOut.value]?.symbol ?? ''
+    );
 
     const requiresApproval = computed(() => {
-      if (isWrap.value || isUnwrap.value || isEthTrade.value) return false;
+      if (props.isWrap || props.isUnwrap || props.isEthTrade) return false;
       return true;
     });
 
@@ -196,6 +221,7 @@ export default defineComponent({
       return allowanceState.value.isUnlocked;
     });
 
+    // METHODS
     function trade() {
       emit('trade');
     }
@@ -205,18 +231,28 @@ export default defineComponent({
     }
 
     return {
+      // methods
       fNum,
+      onClose,
+      approve,
+      trade,
+      gnosisExplorer,
+
+      // computed
       requiresApproval,
       isApproved,
       valueIn,
+      valueOut,
       symbolIn,
       symbolOut,
-      onClose,
-      approve,
-      approving,
-      trade,
-      gnosisExplorer
+      approving
     };
   }
 });
 </script>
+<style scoped>
+.arrow-down {
+  @apply absolute right-0 rounded-full border border-gray-100 flex items-center h-8 w-8 justify-center bg-white mr-3;
+  transform: translateY(-50%);
+}
+</style>

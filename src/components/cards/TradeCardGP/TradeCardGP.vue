@@ -59,6 +59,11 @@
       :order-id="orderId"
       :formatted-fee-amount="formattedFeeAmount"
       :exact-in="exactIn"
+      :is-wrap="isWrap"
+      :is-unwrap="isUnwrap"
+      :is-eth-trade="isEthTrade"
+      :effective-price-exact-in-message="effectivePriceExactInMessage"
+      :effective-price-exact-out-message="effectivePriceExactOutMessage"
       @trade="trade"
       @close="modalTradePreviewIsOpen = false"
     />
@@ -99,7 +104,6 @@ import useWeb3 from '@/composables/useWeb3';
 import useTokenApprovalGP from '@/composables/trade/useTokenApprovalGP';
 
 import { ETHER } from '@/constants/tokenlists';
-import { DEFAULT_TOKEN_DECIMALS } from '@/constants/tokens';
 
 import { bnum, scale } from '@/lib/utils';
 import { isRequired } from '@/lib/utils/validations';
@@ -111,6 +115,7 @@ import TradeSettingsPopover, {
 } from '@/components/popovers/TradeSettingsPopover.vue';
 
 import TradePairGP from './TradePairGP.vue';
+import useNumbers from '@/composables/useNumbers';
 
 // TODO: get app id
 const GNOSIS_APP_ID = 2;
@@ -134,6 +139,7 @@ export default defineComponent({
     const { txListener } = useNotify();
     const { t } = useI18n();
     const { gnosisOperator, gnosisExplorer } = useGnosisProtocol();
+    const { fNum } = useNumbers();
 
     // DATA
     const exactIn = ref(true);
@@ -162,6 +168,9 @@ export default defineComponent({
       parseFloat(store.state.app.slippage)
     );
 
+    const tokenIn = computed(() => tokens.value[tokenInAddress.value]);
+    const tokenOut = computed(() => tokens.value[tokenOutAddress.value]);
+
     const isWrap = computed(() => {
       const config = getConfig();
       return (
@@ -178,15 +187,6 @@ export default defineComponent({
       );
     });
 
-    const tokenInDecimals = computed<number>(
-      () =>
-        tokens.value[tokenInAddress.value]?.decimals ?? DEFAULT_TOKEN_DECIMALS
-    );
-    const tokenOutDecimals = computed(
-      () =>
-        tokens.value[tokenOutAddress.value]?.decimals ?? DEFAULT_TOKEN_DECIMALS
-    );
-
     const explorerLink = computed(() =>
       orderId.value != ''
         ? gnosisExplorer.orderLink(orderId.value)
@@ -194,9 +194,37 @@ export default defineComponent({
     );
 
     const feeAmount = computed(() => feeQuote.value?.amount || '0');
+
     const formattedFeeAmount = computed(() =>
-      formatUnits(feeAmount.value, tokenInDecimals.value)
+      formatUnits(feeAmount.value, tokenIn.value.decimals)
     );
+
+    // const rateMessage = computed(() => {
+    //   const tokenIn = tokens.value[tokenInAmount.value];
+    //   const tokenOut = tokens.value[tokenOutAmount.value];
+    //   if (!tokenIn || !tokenOut) {
+    //     return '';
+    //   }
+    //   const tokenInAmount = parseFloat(tokenInAmountInput.value);
+    //   const tokenOutAmount = parseFloat(tokenOutAmountInput.value);
+    //   if (!tokenInAmount || !tokenOutAmount) {
+    //     return '';
+    //   }
+
+    //   if (isInRate.value) {
+    //     const rate = tokenOutAmount / tokenInAmount;
+    //     const message = `1 ${tokenIn.symbol} = ${fNum(rate, 'token')} ${
+    //       tokenOut.symbol
+    //     }`;
+    //     return message;
+    //   } else {
+    //     const rate = tokenInAmount / tokenOutAmount;
+    //     const message = `1 ${tokenOut.symbol} = ${fNum(rate, 'token')} ${
+    //       tokenIn.symbol
+    //     }`;
+    //     return message;
+    //   }
+    // });
 
     const tradeDisabled = computed(() => {
       if (errorMessage.value !== TradeValidation.VALID || feeExceedsPrice.value)
@@ -206,7 +234,11 @@ export default defineComponent({
 
     useTokenApprovalGP(tokenInAddress, tokenInAmount, tokens);
 
-    const { errorMessage, isValidTokenAmount } = useValidation(
+    const {
+      errorMessage,
+      isValidTokenAmount,
+      tokensAmountsValid
+    } = useValidation(
       tokenInAddress,
       tokenInAmount,
       tokenOutAddress,
@@ -214,11 +246,35 @@ export default defineComponent({
       tokens
     );
 
+    const effectivePriceExactInMessage = computed(() =>
+      tokensAmountsValid.value
+        ? `1 ${tokenIn.value.symbol} = ${fNum(
+            tokenOutAmountScaled.value
+              .div(tokenInAmountScaled.value)
+              .toString(),
+            'token'
+          )} ${tokenOut.value.symbol}`
+        : ''
+    );
+
+    const effectivePriceExactOutMessage = computed(() =>
+      tokensAmountsValid
+        ? `1 ${tokenOut.value.symbol} = ${fNum(
+            tokenInAmountScaled.value
+              .div(tokenOutAmountScaled.value)
+              .toString(),
+            'token'
+          )} ${tokenIn.value.symbol}`
+        : ''
+    );
+
     const title = computed(() => {
       if (isWrap.value) return t('wrap');
       if (isUnwrap.value) return t('unwrap');
       return t('tradeGasless');
     });
+
+    const isEthTrade = computed(() => tokenInAddress.value === ETHER.address);
 
     const appTransactionDeadline = computed<number>(
       () => store.state.app.transactionDeadline
@@ -257,11 +313,11 @@ export default defineComponent({
     });
 
     const tokenInAmountScaled = computed(() =>
-      scale(bnum(tokenInAmount.value), tokenInDecimals.value)
+      scale(bnum(tokenInAmount.value), tokenIn.value.decimals)
     );
 
     const tokenOutAmountScaled = computed(() =>
-      scale(bnum(tokenOutAmount.value), tokenOutDecimals.value)
+      scale(bnum(tokenOutAmount.value), tokenOut.value.decimals)
     );
 
     // METHODS
@@ -416,7 +472,7 @@ export default defineComponent({
                 if (exactIn.value) {
                   tokenOutAmount.value = formatUnits(
                     priceQuoteResult.amount,
-                    tokenOutDecimals.value
+                    tokenOut.value.decimals
                   );
                   const feeAmountRateOut = tokenOutAmountScaled.value
                     .div(tokenInAmountScaled.value)
@@ -436,7 +492,7 @@ export default defineComponent({
 
                   tokenInAmount.value = formatUnits(
                     priceQuoteResult.amount,
-                    tokenInDecimals.value
+                    tokenIn.value.decimals
                   );
                 }
               }
@@ -525,6 +581,11 @@ export default defineComponent({
       tradeDisabled,
       trading,
       tradeSuccess,
+      isWrap,
+      isUnwrap,
+      isEthTrade,
+      effectivePriceExactInMessage,
+      effectivePriceExactOutMessage,
 
       // methods
       handleErrorButtonClick,
