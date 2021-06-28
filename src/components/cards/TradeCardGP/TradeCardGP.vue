@@ -50,20 +50,10 @@
   </BalCard>
   <teleport to="#modal">
     <TradePreviewModalGP
-      :open="modalTradePreviewIsOpen"
-      :address-in="tokenInAddress"
-      :amount-in="tokenInAmount"
-      :address-out="tokenOutAddress"
-      :amount-out="tokenOutAmount"
+      v-if="modalTradePreviewIsOpen"
       :trading="trading"
       :order-id="orderId"
-      :formatted-fee-amount="formattedFeeAmount"
-      :exact-in="exactIn"
-      :is-wrap="isWrap"
-      :is-unwrap="isUnwrap"
-      :is-eth-trade="isEthTrade"
-      :effective-price-exact-in-message="effectivePriceExactInMessage"
-      :effective-price-exact-out-message="effectivePriceExactOutMessage"
+      :order="order"
       @trade="trade"
       @close="modalTradePreviewIsOpen = false"
     />
@@ -139,7 +129,7 @@ export default defineComponent({
     const { txListener } = useNotify();
     const { t } = useI18n();
     const { gnosisOperator, gnosisExplorer } = useGnosisProtocol();
-    const { fNum } = useNumbers();
+    const { fNum, toFiat } = useNumbers();
 
     // DATA
     const exactIn = ref(true);
@@ -154,8 +144,8 @@ export default defineComponent({
     const tokenInAmount = ref('');
     const tokenOutAddress = ref('');
     const tokenOutAmount = ref('');
-    const maximumInAmount = ref('');
-    const minimumOutAmount = ref('');
+    const maximumInAmountScaled = ref('');
+    const minimumOutAmountScaled = ref('');
     const tradeSuccess = ref(false);
     const trading = ref(false);
     const modalTradePreviewIsOpen = ref(false);
@@ -193,38 +183,23 @@ export default defineComponent({
         : explorer.txLink(txHash.value)
     );
 
-    const feeAmount = computed(() => feeQuote.value?.amount || '0');
-
-    const formattedFeeAmount = computed(() =>
-      formatUnits(feeAmount.value, tokenIn.value.decimals)
+    const feeAmountInTokenScaled = computed(
+      () => feeQuote.value?.amount ?? '0'
+    );
+    const feeAmountOutTokenScaled = computed(() =>
+      tokenOutAmountScaled.value
+        .div(tokenInAmountScaled.value)
+        .times(feeAmountInTokenScaled.value)
+        .toString()
     );
 
-    // const rateMessage = computed(() => {
-    //   const tokenIn = tokens.value[tokenInAmount.value];
-    //   const tokenOut = tokens.value[tokenOutAmount.value];
-    //   if (!tokenIn || !tokenOut) {
-    //     return '';
-    //   }
-    //   const tokenInAmount = parseFloat(tokenInAmountInput.value);
-    //   const tokenOutAmount = parseFloat(tokenOutAmountInput.value);
-    //   if (!tokenInAmount || !tokenOutAmount) {
-    //     return '';
-    //   }
+    const feeAmountInToken = computed(() =>
+      formatUnits(feeAmountInTokenScaled.value, tokenIn.value.decimals)
+    );
 
-    //   if (isInRate.value) {
-    //     const rate = tokenOutAmount / tokenInAmount;
-    //     const message = `1 ${tokenIn.symbol} = ${fNum(rate, 'token')} ${
-    //       tokenOut.symbol
-    //     }`;
-    //     return message;
-    //   } else {
-    //     const rate = tokenInAmount / tokenOutAmount;
-    //     const message = `1 ${tokenOut.symbol} = ${fNum(rate, 'token')} ${
-    //       tokenIn.symbol
-    //     }`;
-    //     return message;
-    //   }
-    // });
+    const feeAmountOutToken = computed(() =>
+      formatUnits(feeAmountOutTokenScaled.value, tokenOut.value.decimals)
+    );
 
     const tradeDisabled = computed(() => {
       if (errorMessage.value !== TradeValidation.VALID || feeExceedsPrice.value)
@@ -246,28 +221,6 @@ export default defineComponent({
       tokens
     );
 
-    const effectivePriceExactInMessage = computed(() =>
-      tokensAmountsValid.value
-        ? `1 ${tokenIn.value.symbol} = ${fNum(
-            tokenOutAmountScaled.value
-              .div(tokenInAmountScaled.value)
-              .toString(),
-            'token'
-          )} ${tokenOut.value.symbol}`
-        : ''
-    );
-
-    const effectivePriceExactOutMessage = computed(() =>
-      tokensAmountsValid
-        ? `1 ${tokenOut.value.symbol} = ${fNum(
-            tokenInAmountScaled.value
-              .div(tokenOutAmountScaled.value)
-              .toString(),
-            'token'
-          )} ${tokenIn.value.symbol}`
-        : ''
-    );
-
     const title = computed(() => {
       if (isWrap.value) return t('wrap');
       if (isUnwrap.value) return t('unwrap');
@@ -283,6 +236,46 @@ export default defineComponent({
     const orderKind = computed(
       () => (exactIn.value ? OrderKind.SELL : OrderKind.BUY) as OrderKind
     );
+
+    const order = computed(() => ({
+      exactIn: exactIn.value,
+      tokenIn: tokenIn.value,
+      tokenOut: tokenOut.value,
+      amountIn: tokenInAmount.value,
+      amountOut: tokenOutAmount.value,
+      amountOutFormatted: fNum(tokenOutAmount.value, 'token'),
+      amountInFormatted: fNum(tokenInAmount.value, 'token'),
+      valueIn: toFiat(tokenInAmount.value, tokenInAddress.value),
+      valueOut: toFiat(tokenOutAmount.value, tokenOutAddress.value),
+      isEthTrade: isEthTrade.value,
+      isWrap: isWrap.value,
+      isUnwrap: isUnwrap.value,
+      tokenInAddress: tokenInAddress.value,
+      tokenOutAddress: tokenOutAddress.value,
+      effectivePriceMessage: {
+        tokenIn: tokensAmountsValid.value
+          ? `1 ${tokenIn.value.symbol} = ${fNum(
+              tokenOutAmountScaled.value
+                .div(tokenInAmountScaled.value)
+                .toString(),
+              'token'
+            )} ${tokenOut.value.symbol}`
+          : '',
+        tokenOut: tokensAmountsValid
+          ? `1 ${tokenOut.value.symbol} = ${fNum(
+              tokenInAmountScaled.value
+                .div(tokenOutAmountScaled.value)
+                .toString(),
+              'token'
+            )} ${tokenIn.value.symbol}`
+          : ''
+      },
+      minimumOutAmountScaled: minimumOutAmountScaled.value,
+      maximumInAmountScaled: maximumInAmountScaled.value,
+      feeAmountOutToken: feeAmountOutToken.value,
+      feeAmountInToken: feeAmountInToken.value,
+      requiresApproval: !(isWrap.value || isUnwrap.value || isEthTrade)
+    }));
 
     const error = computed(() => {
       if (feeExceedsPrice.value) {
@@ -367,16 +360,18 @@ export default defineComponent({
           sellToken: normalizeTokenAddress(tokenInAddress.value),
           buyToken: normalizeTokenAddress(tokenOutAddress.value),
           sellAmount: bnum(
-            exactIn.value ? tokenInAmountScaled.value : maximumInAmount.value
+            exactIn.value
+              ? tokenInAmountScaled.value
+              : maximumInAmountScaled.value
           )
-            .minus(feeAmount.value)
+            .minus(feeAmountInTokenScaled.value)
             .toString(),
           buyAmount: exactIn.value
-            ? minimumOutAmount.value.toString()
+            ? minimumOutAmountScaled.value.toString()
             : tokenOutAmountScaled.value.toString(),
           validTo: calculateValidTo(appTransactionDeadline.value),
           appData,
-          feeAmount: feeAmount.value,
+          feeAmount: feeAmountInTokenScaled.value,
           kind: orderKind.value,
           receiver: account.value,
           partiallyFillable: false // Always fill or kill
@@ -474,18 +469,15 @@ export default defineComponent({
                     priceQuoteResult.amount,
                     tokenOut.value.decimals
                   );
-                  const feeAmountRateOut = tokenOutAmountScaled.value
-                    .div(tokenInAmountScaled.value)
-                    .times(feeAmount.value);
 
-                  minimumOutAmount.value = tokenOutAmountScaled.value
-                    .minus(feeAmountRateOut)
+                  minimumOutAmountScaled.value = tokenOutAmountScaled.value
+                    .minus(feeAmountOutTokenScaled.value)
                     .div(1 + slippageBufferRate.value)
                     .integerValue(BigNumber.ROUND_DOWN)
                     .toString();
                 } else {
-                  maximumInAmount.value = tokenInAmountScaled.value
-                    .plus(feeAmount.value)
+                  maximumInAmountScaled.value = tokenInAmountScaled.value
+                    .plus(feeAmountInTokenScaled.value)
                     .times(1 + slippageBufferRate.value)
                     .integerValue(BigNumber.ROUND_DOWN)
                     .toString();
@@ -573,7 +565,6 @@ export default defineComponent({
 
       // computed
       explorerLink,
-      formattedFeeAmount,
       title,
       error,
       errorMessage,
@@ -581,11 +572,7 @@ export default defineComponent({
       tradeDisabled,
       trading,
       tradeSuccess,
-      isWrap,
-      isUnwrap,
-      isEthTrade,
-      effectivePriceExactInMessage,
-      effectivePriceExactOutMessage,
+      order,
 
       // methods
       handleErrorButtonClick,

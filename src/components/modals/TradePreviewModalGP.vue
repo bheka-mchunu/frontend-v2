@@ -1,15 +1,15 @@
 <template>
-  <BalModal :show="open" @close="onClose" :title="$t('previewTrade')">
+  <BalModal show @close="onClose" :title="$t('previewTrade')">
     <div>
-      <div class="relative">
+      <div class="relative mb-6">
         <div
           class="p-3 bg-gray-50 border border-gray-100 rounded-tr-lg rounded-tl-lg"
         >
           {{ $t('effectivePrice') }}
           {{
-            exactIn
-              ? effectivePriceExactInMessage
-              : effectivePriceExactOutMessage
+            order.exactIn
+              ? order.effectivePriceMessage.tokenIn
+              : order.effectivePriceMessage.tokenOut
           }}
         </div>
         <div
@@ -18,14 +18,14 @@
           <div class="p-3 border-gray-100 border-b relative">
             <div class="flex items-center">
               <div class="mr-3">
-                <BalAsset :address="addressIn" :size="36" />
+                <BalAsset :address="order.tokenIn?.address" :size="36" />
               </div>
               <div>
                 <div class="font-medium">
-                  {{ fNum(amountIn, 'token') }} {{ symbolIn }}
+                  {{ order.amountOutFormatted }} {{ order.tokenIn?.symbol }}
                 </div>
                 <div class="text-gray-500 text-sm">
-                  {{ fNum(valueIn, 'usd') }}
+                  {{ order.valueIn }}
                 </div>
               </div>
             </div>
@@ -36,25 +36,45 @@
           <div class="p-3">
             <div class="flex items-center">
               <div class="mr-3">
-                <BalAsset :address="addressOut" :size="36" />
+                <BalAsset :address="order.tokenOut?.address" :size="36" />
               </div>
               <div>
                 <div class="font-medium">
-                  {{ fNum(amountOut, 'token') }} {{ symbolOut }}
+                  {{ order.amountOutFormatted }}
+                  {{ order.tokenOut?.symbol }}
                 </div>
                 <div class="text-gray-500 text-sm">
-                  {{ fNum(valueOut, 'usd') }}
+                  {{ order.valueOut }}
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-      <div>
-        <div v-if="formattedFeeAmount > 0" class="mt-6 mb-3 text-sm">
-          Fee: {{ fNum(formattedFeeAmount, 'token') }}
-          {{ symbolIn }}
+      <BalCard noPad>
+        <template v-slot:header>
+          <div class="p-3 flex w-full items-center justify-between border-b">
+            <div class="font-bold">{{ $t('summary') }}</div>
+            <div class="flex divide-x">
+              <div class="pr-1">{{ $t('tokens') }}</div>
+              <div class="pl-1">USD</div>
+            </div>
+          </div>
+        </template>
+        <div class="p-3">
+          <div class="flex">
+            <div>{{ $t('amountBeforeFees') }}</div>
+            <div>
+              {{
+                order.exactIn
+                  ? fNum(order.amountOut, 'token')
+                  : fNum(order.amountIn, 'token')
+              }}
+            </div>
+          </div>
         </div>
+      </BalCard>
+      <div>
         <div class="mt-6 mb-3 text-sm">
           Requires {{ requiresApproval ? 2 : 1 }}
           {{ requiresApproval ? 'transactions' : 'transaction' }}:
@@ -82,8 +102,9 @@
               {{ requiresApproval ? 2 : 1 }}
             </div>
             <div class="ml-3">
-              {{ $t('trade') }} {{ fNum(valueIn, 'usd') }} {{ symbolIn }} ->
-              {{ symbolOut }}
+              {{ $t('trade') }} {{ order.valueIn }}
+              {{ order.tokenIn?.symbol }} ->
+              {{ order.tokenOut?.symbol }}
             </div>
           </div>
         </div>
@@ -91,9 +112,9 @@
       <BalBtn
         v-if="requiresApproval && !isApproved"
         class="mt-5"
-        :label="`${$t('approve')} ${symbolIn}`"
+        :label="`${$t('approve')} ${order.tokenIn?.symbol}`"
         :loading="approving"
-        :loading-label="`${$t('approving')} ${symbolIn}…`"
+        :loading-label="`${$t('approving')} ${order.tokenIn?.symbol}…`"
         color="gradient"
         block
         @click.prevent="approve"
@@ -108,22 +129,39 @@
         block
         @click.prevent="trade"
       />
-      <div class="m-1" v-if="orderId">
-        <BalLink :href="gnosisExplorer.orderLink(orderId)" external class="m1">
-          Track order
-        </BalLink>
-      </div>
     </div>
   </BalModal>
 </template>
 
 <script lang="ts">
-import { defineComponent, toRefs, computed } from 'vue';
+import { defineComponent, toRefs, computed, ref, PropType } from 'vue';
 
 import useNumbers from '@/composables/useNumbers';
 import useTokenApprovalGP from '@/composables/trade/useTokenApprovalGP';
 import useGnosisProtocol from '@/composables/useGnosisProtocol';
 import useTokens from '@/composables/useTokens';
+import { bnum } from '@balancer-labs/sor2/dist/bmath';
+import { Token } from '@/types';
+
+type Order = {
+  exactIn: boolean;
+  amountIn: string;
+  amountOut: string;
+  tokenIn: Token;
+  tokenOut: Token;
+  isEthTrade: boolean;
+  isWrap: boolean;
+  isUnwrap: boolean;
+  effectivePriceMessage: {
+    tokenIn: string;
+    tokenOut: string;
+  };
+  minimumOutAmountScaled: string;
+  maximumInAmountScaled: string;
+  feeAmountOutToken: string;
+  feeAmountInToken: string;
+  requiresApproval: boolean;
+};
 
 export default defineComponent({
   emits: ['trade', 'close'],
@@ -132,84 +170,35 @@ export default defineComponent({
       type: Boolean,
       default: false
     },
-    addressIn: {
-      type: String,
-      required: true
-    },
-    amountIn: {
-      type: String,
-      required: true
-    },
-    addressOut: {
-      type: String,
-      required: true
-    },
-    amountOut: {
-      type: String,
-      required: true
-    },
     trading: {
       type: Boolean,
       required: true
     },
-    orderId: {
-      type: String
-    },
-    formattedFeeAmount: {
-      type: String,
-      required: true
-    },
-    isWrap: {
-      type: Boolean,
-      required: true
-    },
-    isUnwrap: {
-      type: Boolean,
-      required: true
-    },
-    exactIn: {
-      type: Boolean,
-      required: true
-    },
-    isEthTrade: {
-      type: Boolean,
-      required: true
-    },
-    effectivePriceExactInMessage: {
-      type: String,
-      required: true
-    },
-    effectivePriceExactOutMessage: {
-      type: String,
+    order: {
+      type: Object as PropType<Order>,
       required: true
     }
   },
   setup(props, { emit }) {
     // COMPOSABLES
-    const { fNum, toFiat } = useNumbers();
+    const { fNum } = useNumbers();
     const { gnosisExplorer } = useGnosisProtocol();
     const { allTokensIncludeEth: tokens } = useTokens();
 
     // DATA
-    const { addressIn, amountIn, amountOut, addressOut } = toRefs(props);
-
+    const { order } = toRefs(props);
+    const summaryPriceInFiat = ref(false);
     // COMPUTED
-    const valueIn = computed(() => toFiat(amountIn.value, addressIn.value));
 
-    const valueOut = computed(() => toFiat(amountOut.value, addressOut.value));
+    // const summary = computed(() => ({
+    //   amountBeforeFees: exactIn.value,
+    //   solverFees: exactIn.value ? feeAmountOutToken.value ? feeAmountInToken.value,
+    //   minRecevied: min
+    // }));
 
-    const symbolIn = computed(
-      () => tokens.value[addressIn.value]?.symbol ?? ''
-    );
+    const addressIn = computed(() => order.value.tokenIn?.address);
 
-    const symbolOut = computed(
-      () => tokens.value[addressOut.value]?.symbol ?? ''
-    );
-
-    const requiresApproval = computed(() => {
-      if (props.isWrap || props.isUnwrap || props.isEthTrade) return false;
-      return true;
-    });
+    const amountIn = computed(() => order.value.amountIn);
 
     const { approving, allowanceState, approve } = useTokenApprovalGP(
       addressIn,
@@ -239,12 +228,7 @@ export default defineComponent({
       gnosisExplorer,
 
       // computed
-      requiresApproval,
       isApproved,
-      valueIn,
-      valueOut,
-      symbolIn,
-      symbolOut,
       approving
     };
   }
