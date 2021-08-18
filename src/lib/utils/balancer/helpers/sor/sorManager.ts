@@ -5,9 +5,7 @@ import {
   SubGraphPoolsBase,
   SubgraphPoolBase,
   SwapTypes,
-  fetchSubgraphPools,
-  SwapOptions,
-  PoolFilter
+  fetchSubgraphPools
 } from '@balancer-labs/sor2';
 import { SOR as SORV1 } from '@balancer-labs/sor';
 import { BaseProvider } from '@ethersproject/providers';
@@ -220,18 +218,12 @@ export class SorManager {
 
     const timestampSeconds = Math.floor(Date.now() / 1000);
 
-    // The poolTypeFilter can be used to filter to different pool types. Useful for debug/testing.
-    const swapOptions: SwapOptions = {
-      poolTypeFilter: PoolFilter.All,
-      timestamp: timestampSeconds
-    };
-
     const swapInfoV2: SwapInfo = await this.sorV2.getSwaps(
       v2TokenIn.toLowerCase(),
       v2TokenOut.toLowerCase(),
       swapTypeV2,
       amountNormalised,
-      swapOptions
+      timestampSeconds
     );
 
     // Both are scaled amounts
