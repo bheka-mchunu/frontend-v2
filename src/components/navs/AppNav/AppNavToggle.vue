@@ -4,21 +4,21 @@
       :to="{ name: 'home' }"
       :class="[
         'toggle-link pl-6 pr-4 border-l rounded-l-full',
-        { [activeClasses]: !isTradePage }
-      ]"
-      @click="trackGoal(Goals.ClickNavInvest)"
-    >
-      {{ $t('invest') }}
-    </router-link>
-    <router-link
-      :to="{ name: 'trade' }"
-      :class="[
-        'toggle-link pl-4 pr-6 border-r rounded-r-full',
-        { [activeClasses]: isTradePage }
+        { [activeClasses]: !isInvestPage && !isPoolPage }
       ]"
       @click="trackGoal(Goals.ClickNavTrade)"
     >
       {{ $t('trade') }}
+    </router-link>
+    <router-link
+      :to="{ name: 'invest' }"
+      :class="[
+        'toggle-link pl-4 pr-6 border-r rounded-r-full',
+        { [activeClasses]: isInvestPage || isPoolPage }
+      ]"
+      @click="trackGoal(Goals.ClickNavInvest)"
+    >
+      {{ $t('invest') }}
     </router-link>
   </div>
 </template>
@@ -34,11 +34,13 @@ export default defineComponent({
   setup() {
     const route = useRoute();
     const activeClasses = 'bg-black border-black text-white';
-    const isTradePage = computed(() => route.name === 'trade');
+    const isInvestPage = computed(() => route.name === 'invest');
+    const isPoolPage = computed(() => route.name === 'pool');
     const { trackGoal, Goals } = useFathom();
 
     return {
-      isTradePage,
+      isInvestPage,
+      isPoolPage,
       activeClasses,
       trackGoal,
       Goals

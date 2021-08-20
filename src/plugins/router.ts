@@ -4,12 +4,12 @@ import Pool from '@/pages/Pool.vue';
 import Trade from '@/pages/Trade.vue';
 
 const routes: RouteRecordRaw[] = [
-  { path: '/', name: 'home', component: Home },
-  { path: '/trade/:assetIn?/:assetOut?', name: 'trade', component: Trade },
+  { path: '/:assetIn?/:assetOut?', name: 'home', component: Trade },
+  { path: '/invest', name: 'invest', component: Home },
   {
     path: '/swap/:assetIn?/:assetOut?',
     redirect: to => {
-      return `/trade${to.path.split('/swap')[1]}`;
+      return `/invest${to.path.split('/swap')[1]}`;
     }
   },
   { path: '/pool/:id', name: 'pool', component: Pool },

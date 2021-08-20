@@ -1,7 +1,7 @@
 <template>
   <div id="app">
     <AppNav />
-    <AppHero v-if="isHomePage" />
+    <AppHero v-if="isInvestPage" />
     <div class="pb-12">
       <router-view :key="$route.path" class="flex-auto" />
     </div>
@@ -45,7 +45,7 @@ export default defineComponent({
 
     // COMPUTED
     const web3Modal = computed(() => store.state.web3.modal);
-    const isHomePage = computed(() => route.path === '/');
+    const isInvestPage = computed(() => route.path === '/invest');
 
     // METHODS
     const setAccountModal = val => store.commit('web3/setAccountModal', val);
@@ -67,7 +67,7 @@ export default defineComponent({
     return {
       // computed
       web3Modal,
-      isHomePage,
+      isInvestPage,
       // methods
       onLogin,
       setAccountModal
