@@ -239,7 +239,7 @@ export default defineComponent({
       range: 1000,
       highPiAccepted: false
     });
-
+    
     // COMPOSABLES
     const store = useStore();
     const { txListener } = useNotify();
@@ -279,13 +279,13 @@ export default defineComponent({
 
     const singleAssetMaxes = computed(() => {
       return props.pool.tokenAddresses.map((_, tokenIndex) => {
-        return formatUnits(
-          poolCalculator
-            .exactBPTInForTokenOut(bptBalance.value.toString(), tokenIndex)
-            .toString(),
-          tokenDecimals(tokenIndex)
-        );
-      });
+          return formatUnits(
+            poolCalculator
+              .exactBPTInForTokenOut(bptBalance.value.toString(), tokenIndex)
+              .toString(),
+            tokenDecimals(tokenIndex)
+          );
+        });
     });
 
     const propMaxUSD = computed(() => {
@@ -488,19 +488,18 @@ export default defineComponent({
     // Left here so numbers can be debugged in conosle
     // Talk to Fernando to see if still needed
     async function calcBptIn() {
-      const { bptIn: queryBptIn } = await poolExchange.value.queryExit(
-        store.state.web3.account,
-        fullAmounts.value,
-        bptBalance.value,
-        exitTokenIndex.value,
-        exactOut.value
-      );
-      console.log(
-        'bptIn (queryExit)',
-        formatUnits(queryBptIn.toString(), props.pool.onchain.decimals)
-      );
-      console.log('bptIn (JS)', bptIn.value);
-    }
+      try {
+          const { bptIn: queryBptIn } = await poolExchange.value.queryExit(
+            store.state.web3.account,
+            fullAmounts.value,
+            bptBalance.value,
+            exitTokenIndex.value,
+            exactOut.value
+          );
+      }catch(error) {
+        console.log(error);
+      };
+    };
 
     function preventOverflow(value: number, index: number): void {
       if (!value.toString().includes('.')) return;
