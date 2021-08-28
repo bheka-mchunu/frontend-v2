@@ -21,9 +21,18 @@
           @close="investmentSuccess = false"
         />
       </template>
-      <template 
-        v-if="activeTab === 'withdraw' 
-        && Object.values(pool.onchain.tokens).find(t => t.weight !== undefined)
+      <p
+        v-if="
+          Object.values(pool.onchain.tokens).find(t => t.weight === undefined)
+        "
+        class="p-4"
+      >
+        Not weight available
+      </p>
+      <template
+        v-if="
+          activeTab === 'withdraw' &&
+            Object.values(pool.onchain.tokens).find(t => t.weight !== undefined)
         "
       >
         <WithdrawForm
@@ -71,7 +80,7 @@ export default defineComponent({
     pool: { type: Object, required: true },
     missingPrices: { type: Boolean, default: false }
   },
-  
+
   setup(_, { emit }) {
     // COMPOSABLES
     const { t } = useI18n();
