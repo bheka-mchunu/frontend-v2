@@ -21,7 +21,20 @@
           @close="investmentSuccess = false"
         />
       </template>
-      <template v-if="activeTab === 'withdraw'">
+      <p
+        v-if="
+          Object.values(pool.onchain.tokens).find(t => t.weight === undefined)
+        "
+        class="p-4"
+      >
+        Not weight available
+      </p>
+      <template
+        v-if="
+          activeTab === 'withdraw' &&
+            Object.values(pool.onchain.tokens).find(t => t.weight !== undefined)
+        "
+      >
         <WithdrawForm
           :pool="pool"
           :missing-prices="missingPrices"
